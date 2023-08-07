@@ -1,0 +1,38 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <PackageId>CloudflareJwtValidator</PackageId>
+    <Nullable>enable</Nullable>
+    <Authors>delebru</Authors>
+    <Company>delebru</Company>
+    <Version>2.1.0</Version>
+    <Title>Cloudflare JWT Validation Middleware</Title>
+    <Description>Middleware for simple JWT (JSON Web Token) validation on web apps behind Cloudflare Zero Trust.</Description>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <PackageLicenseExpression>GPL-3.0-or-later</PackageLicenseExpression>
+    <PackageReadmeFile>README.nuget.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/delebru/CloudflareJwtValidator.NET</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="6.32.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="README.nuget.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <TreatWarningsAsErrors>True</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <TreatWarningsAsErrors>True</TreatWarningsAsErrors>
+  </PropertyGroup>
+</Project>
