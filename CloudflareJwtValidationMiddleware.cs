@@ -9,6 +9,7 @@ using CloudflareJwtValidator.Extensions;
 using CloudflareJwtValidator.Models;
 
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Primitives;
 using Microsoft.IdentityModel.Tokens;
 
 namespace CloudflareJwtValidator
@@ -122,7 +123,8 @@ namespace CloudflareJwtValidator
                 return false;
             }
 
-            if (!requestHeaders.TryGetValue(kCloudflareEmailHeader, out var authenticatedUserEmail) || string.IsNullOrWhiteSpace(authenticatedUserEmail))
+            if (Config.ValidateAuthenticatedEmail
+                && (!requestHeaders.TryGetValue(kCloudflareEmailHeader, out var authenticatedUserEmail) || string.IsNullOrWhiteSpace(authenticatedUserEmail)))
             {
                 if (Config.LogFailedValidations)
                 {
@@ -130,6 +132,10 @@ namespace CloudflareJwtValidator
                 }
 
                 return false;
+            }
+            else
+            {
+                authenticatedUserEmail = string.Empty;
             }
 
             JwtSigningKey[] cloudflareJwtSigningKeys;
@@ -224,7 +230,9 @@ namespace CloudflareJwtValidator
                 };
             }
 
-            if (!token.Payload.TryGetValue("email", out var tokenUserEmail) || tokenUserEmail.ToString() != authenticatedUserEmail)
+            if (Config.ValidateAuthenticatedEmail
+                && (!token.Payload.TryGetValue("email", out var tokenUserEmail) 
+                    || !authenticatedUserEmail.Equals(tokenUserEmail.ToString(), StringComparison.OrdinalIgnoreCase)))
             {
                 return new TokenValidationResult()
                 {

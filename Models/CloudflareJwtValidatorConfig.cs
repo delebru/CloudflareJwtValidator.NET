@@ -102,5 +102,10 @@ namespace CloudflareJwtValidator.Models
             get => _logFailedValidations || UseDebugLogs;
             set => _logFailedValidations = value;
         }
+
+        /// <summary>
+        /// Ensures the email address in the Cf-Access-Authenticated-User-Email header matches the JWT's payload email address.
+        /// </summary>
+        public bool ValidateAuthenticatedEmail { get; set; } = true;
     }
 }

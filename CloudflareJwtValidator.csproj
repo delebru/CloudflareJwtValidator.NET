@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
     <Authors>delebru</Authors>
     <Company>delebru</Company>
-    <Version>2.1.0</Version>
+    <Version>2.1.1</Version>
     <Title>Cloudflare JWT Validation Middleware</Title>
     <Description>Middleware for simple JWT (JSON Web Token) validation on web apps behind Cloudflare Zero Trust.</Description>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
