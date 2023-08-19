@@ -123,15 +123,19 @@ namespace CloudflareJwtValidator
                 return false;
             }
 
-            if (Config.ValidateAuthenticatedEmail
-                && (!requestHeaders.TryGetValue(kCloudflareEmailHeader, out var authenticatedUserEmail) || string.IsNullOrWhiteSpace(authenticatedUserEmail)))
-            {
-                if (Config.LogFailedValidations)
-                {
-                    Log($"{validationErrorMessage} missing header value '{kCloudflareEmailHeader}'");
-                }
+            StringValues authenticatedUserEmail;
 
-                return false;
+            if (Config.ValidateAuthenticatedEmail)
+            {
+                if (!requestHeaders.TryGetValue(kCloudflareEmailHeader, out authenticatedUserEmail) || string.IsNullOrWhiteSpace(authenticatedUserEmail))
+                {
+                    if (Config.LogFailedValidations)
+                    {
+                        Log($"{validationErrorMessage} missing header value '{kCloudflareEmailHeader}'");
+                    }
+
+                    return false;
+                }
             }
             else
             {
