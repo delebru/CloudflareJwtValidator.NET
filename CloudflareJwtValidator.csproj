@@ -1,12 +1,12 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net6.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>disable</ImplicitUsings>
     <PackageId>CloudflareJwtValidator</PackageId>
     <Nullable>enable</Nullable>
     <Authors>delebru</Authors>
     <Company>delebru</Company>
-    <Version>2.2.0</Version>
+    <Version>2.3.0</Version>
     <Title>Cloudflare JWT Validation Middleware</Title>
     <Description>Middleware for simple JWT (JSON Web Token) validation on web apps behind Cloudflare Zero Trust.</Description>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
@@ -21,7 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="6.35.0" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="7.5.1" />
   </ItemGroup>
 
   <ItemGroup>

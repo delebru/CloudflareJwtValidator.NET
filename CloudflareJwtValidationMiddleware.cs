@@ -3,6 +3,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 
 using CloudflareJwtValidator.Extensions;
@@ -146,7 +147,7 @@ namespace CloudflareJwtValidator
 
             try
             {
-                cloudflareJwtSigningKeys = await GetCloudflareJwtSigningKeys();
+                cloudflareJwtSigningKeys = await LockAndGetCloudflareJwtSigningKeys();
             }
             catch (Exception ex)
             {
@@ -158,7 +159,7 @@ namespace CloudflareJwtValidator
                 return false;
             }
 
-            var tokenValidationResult = await ValidateJwtToken(cloudflareJwtValue, cloudflareJwtSigningKeys, authenticatedUserEmail);
+            var tokenValidationResult = await ValidateJwtToken(cloudflareJwtValue.ToString(), cloudflareJwtSigningKeys, authenticatedUserEmail.ToString());
             
             if (!tokenValidationResult.IsValid && Config.LogFailedValidations)
             {
@@ -172,6 +173,23 @@ namespace CloudflareJwtValidator
             return tokenValidationResult.IsValid;
         }
 
+        private static SemaphoreSlim CloudflareJwtKeysCacheSemaphore { get; } = new(1, 1);
+
+        // Ensure thread safety and a single instance of GetCloudflareJwtSigningKeys function execution
+        private async Task<JwtSigningKey[]> LockAndGetCloudflareJwtSigningKeys()
+        {
+            await CloudflareJwtKeysCacheSemaphore.WaitAsync();
+
+            try
+            {
+                return await GetCloudflareJwtSigningKeys();
+            }
+            finally
+            {
+                CloudflareJwtKeysCacheSemaphore.Release();
+            }
+        }
+
         private static (JwtSigningKey[]?, DateTime) CloudflareJwtKeysCache { get; set; }
         
         private async Task<JwtSigningKey[]> GetCloudflareJwtSigningKeys()
@@ -183,7 +201,9 @@ namespace CloudflareJwtValidator
             {
                 var url = $"{Config.JwtIssuer}/cdn-cgi/access/certs";
 
-                var cloudflareJwtResponseJson = await HttpClientFactory.CreateClient().GetStringAsync(url);
+                using var httpClient = HttpClientFactory.CreateClient();
+
+                var cloudflareJwtResponseJson = await httpClient.GetStringAsync(url);
 
                 var cloudflareJwtResponse = JsonSerializer.Deserialize<CloudflareJwtResponse>(cloudflareJwtResponseJson)
                     ?? throw new NullReferenceException(nameof(CloudflareJwtResponse));
