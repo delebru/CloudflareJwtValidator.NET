@@ -24,7 +24,7 @@ namespace CloudflareJwtValidator
 
         private readonly RequestDelegate _next;
 
-        public CloudflareJwtValidationMiddleware(RequestDelegate next, IHttpClientFactory httpClientFactory)
+        public CloudflareJwtValidationMiddleware(RequestDelegate next, HttpClient httpClient)
         {
             if (Config is null)
             {
@@ -34,19 +34,19 @@ namespace CloudflareJwtValidator
                 );
             }
 
-            if (httpClientFactory is null)
+            if (httpClient is null)
             {
                 throw new ArgumentNullException(
-                    nameof(httpClientFactory),
-                    $"Middleware requires {nameof(IHttpClientFactory)} injection. Add 'builder.Services.AddHttpClient();' to the app's services."
+                    nameof(httpClient),
+                    $"Middleware is missing required services. Add 'builder.Services.AddCloudflareJwtValidation();' to the app's services."
                 );
             }
 
             _next = next;
-            HttpClientFactory = httpClientFactory;
+            HttpClient = httpClient;
         }
 
-        private IHttpClientFactory HttpClientFactory { get; }
+        private HttpClient HttpClient { get; }
 
         internal static CloudflareJwtValidatorConfig Config { get; set; } = default!;
 
@@ -201,9 +201,7 @@ namespace CloudflareJwtValidator
             {
                 var url = $"{Config.JwtIssuer}/cdn-cgi/access/certs";
 
-                using var httpClient = HttpClientFactory.CreateClient();
-
-                var cloudflareJwtResponseJson = await httpClient.GetStringAsync(url);
+                var cloudflareJwtResponseJson = await HttpClient.GetStringAsync(url);
 
                 var cloudflareJwtResponse = JsonSerializer.Deserialize<CloudflareJwtResponse>(cloudflareJwtResponseJson)
                     ?? throw new NullReferenceException(nameof(CloudflareJwtResponse));
