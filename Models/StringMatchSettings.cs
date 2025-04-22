@@ -24,7 +24,7 @@ namespace CloudflareJwtValidator.Models
 
         public StringMatchSettings(MatchingMode matchingMode, params Regex[]? regexes)
         {
-            if (regexes is not null)
+            if (regexes != null)
             {
                 if (regexes.Any(IsNullOrEmpty))
                 {
@@ -54,19 +54,19 @@ namespace CloudflareJwtValidator.Models
             )
         { }
 
-        public static StringMatchSettings IncludeAll => new(MatchingMode.Exclude, regexes: null);
+        public static StringMatchSettings IncludeAll => new StringMatchSettings(MatchingMode.Exclude, regexes: null);
 
-        public static StringMatchSettings ExcludeAll => new(MatchingMode.Include, regexes: null);
-
-
-        public static StringMatchSettings IncludeAllExcept(params string[]? matchingPatterns) => new(MatchingMode.Exclude, matchingPatterns);
-
-        public static StringMatchSettings ExcludeAllExcept(params string[]? matchingPatterns) => new(MatchingMode.Include, matchingPatterns);
+        public static StringMatchSettings ExcludeAll => new StringMatchSettings(MatchingMode.Include, regexes: null);
 
 
-        public static StringMatchSettings IncludeAllExcept(params Regex[]? regexes) => new(MatchingMode.Exclude, regexes);
+        public static StringMatchSettings IncludeAllExcept(params string[]? matchingPatterns) => new StringMatchSettings(MatchingMode.Exclude, matchingPatterns);
 
-        public static StringMatchSettings ExcludeAllExcept(params Regex[]? regexes) => new(MatchingMode.Include, regexes);
+        public static StringMatchSettings ExcludeAllExcept(params string[]? matchingPatterns) => new StringMatchSettings(MatchingMode.Include, matchingPatterns);
+
+
+        public static StringMatchSettings IncludeAllExcept(params Regex[]? regexes) => new StringMatchSettings(MatchingMode.Exclude, regexes);
+
+        public static StringMatchSettings ExcludeAllExcept(params Regex[]? regexes) => new StringMatchSettings(MatchingMode.Include, regexes);
 
 
         public MatchingMode MatchingMode { get; }

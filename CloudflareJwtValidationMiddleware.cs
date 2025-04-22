@@ -20,7 +20,7 @@ namespace CloudflareJwtValidator
         private const string kCloudflareJwtHeader = "Cf-Access-Jwt-Assertion";
         private const string kCloudflareEmailHeader = "Cf-Access-Authenticated-User-Email";
 
-        private const string kLogTag = $"[CloudflareJwtValidator]";
+        private const string kLogTag = "[CloudflareJwtValidator]";
 
         private readonly RequestDelegate _next;
 
@@ -173,7 +173,7 @@ namespace CloudflareJwtValidator
             return tokenValidationResult.IsValid;
         }
 
-        private static SemaphoreSlim CloudflareJwtKeysCacheSemaphore { get; } = new(1, 1);
+        private static SemaphoreSlim CloudflareJwtKeysCacheSemaphore { get; } = new SemaphoreSlim(1, 1);
 
         // Ensure thread safety and a single instance of GetCloudflareJwtSigningKeys function execution
         private async Task<JwtSigningKey[]> LockAndGetCloudflareJwtSigningKeys()
