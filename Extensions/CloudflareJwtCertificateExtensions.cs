@@ -10,12 +10,12 @@ namespace CloudflareJwtValidator.Extensions
 {
     internal static class CloudflareJwtCertificateExtensions
     {
-        public static JwtSigningKey[] ToSigningKeys(this CloudflareJwtCertificate[] cloudflareJwtCertificates)
+        public static RsaSecurityKey[] ToSigningKeys(this CloudflareJwtCertificate[] cloudflareJwtCertificates)
             => cloudflareJwtCertificates
                 .Select(cert => cert.ToSigningKey())
                 .ToArray();
 
-        public static JwtSigningKey ToSigningKey(this CloudflareJwtCertificate cloudflareJwtCertificate)
+        public static RsaSecurityKey ToSigningKey(this CloudflareJwtCertificate cloudflareJwtCertificate)
         {
             var cleanedCertificateString = cloudflareJwtCertificate.Certificate
                 .Replace("-----BEGIN CERTIFICATE-----", null)
@@ -23,11 +23,12 @@ namespace CloudflareJwtValidator.Extensions
 
             var certificateData = Convert.FromBase64String(cleanedCertificateString);
 
-            var certificate = new X509Certificate2(certificateData);
+            using var certificate = new X509Certificate2(certificateData);
 
-            var signingKey = new X509SecurityKey(certificate);
+            using var rsa = certificate.GetRSAPublicKey()
+                ?? throw new InvalidOperationException("Cloudflare signing certificate does not contain an RSA public key.");
 
-            return new JwtSigningKey(cloudflareJwtCertificate.KeyId, signingKey);
+            return new RsaSecurityKey(rsa.ExportParameters(false));
         }
     }
 }

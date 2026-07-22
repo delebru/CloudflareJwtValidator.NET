@@ -1,6 +1,5 @@
-﻿using System;
+using System;
 using System.IdentityModel.Tokens.Jwt;
-using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
@@ -143,7 +142,7 @@ namespace CloudflareJwtValidator
                 authenticatedUserEmail = string.Empty;
             }
 
-            JwtSigningKey[] cloudflareJwtSigningKeys;
+            RsaSecurityKey[] cloudflareJwtSigningKeys;
 
             try
             {
@@ -163,10 +162,12 @@ namespace CloudflareJwtValidator
             
             if (!tokenValidationResult.IsValid && Config.LogFailedValidations)
             {
-                var errorLog = Config.UseDebugLogs 
-                    ? tokenValidationResult.Exception.ToString()
-                    : tokenValidationResult.Exception.Message;
-
+                var errorLog = tokenValidationResult.Exception == null 
+                    ? "unknown error"
+                    : Config.UseDebugLogs
+                        ? tokenValidationResult.Exception.ToString()
+                        : tokenValidationResult.Exception.Message;
+                
                 Log($"{validationErrorMessage} invalid token: {errorLog}");
             }
 
@@ -176,7 +177,7 @@ namespace CloudflareJwtValidator
         private static SemaphoreSlim CloudflareJwtKeysCacheSemaphore { get; } = new SemaphoreSlim(1, 1);
 
         // Ensure thread safety and a single instance of GetCloudflareJwtSigningKeys function execution
-        private async Task<JwtSigningKey[]> LockAndGetCloudflareJwtSigningKeys()
+        private async Task<RsaSecurityKey[]> LockAndGetCloudflareJwtSigningKeys()
         {
             await CloudflareJwtKeysCacheSemaphore.WaitAsync();
 
@@ -190,9 +191,9 @@ namespace CloudflareJwtValidator
             }
         }
 
-        private static (JwtSigningKey[]?, DateTime) CloudflareJwtKeysCache { get; set; }
+        private static (RsaSecurityKey[]?, DateTime) CloudflareJwtKeysCache { get; set; }
         
-        private async Task<JwtSigningKey[]> GetCloudflareJwtSigningKeys()
+        private async Task<RsaSecurityKey[]> GetCloudflareJwtSigningKeys()
         {
             var cloudflareJwtSigningKeys = CloudflareJwtKeysCache.Item1;
             var cloudflareJwtResponseCacheDate = CloudflareJwtKeysCache.Item2;
@@ -214,65 +215,44 @@ namespace CloudflareJwtValidator
             return cloudflareJwtSigningKeys;
         }
 
-        private static async Task<TokenValidationResult> ValidateJwtToken(string cloudflareJwtValue, JwtSigningKey[] cloudflareJwtSigningKeys, string authenticatedUserEmail)
+        private static async Task<TokenValidationResult> ValidateJwtToken(string cloudflareJwtValue, RsaSecurityKey[] cloudflareJwtSigningKeys, string authenticatedUserEmail)
         {
-            var tokenHandler = new JwtSecurityTokenHandler();
-
-            var token = tokenHandler.ReadJwtToken(cloudflareJwtValue);
-
-            if (!token.Header.TryGetValue("kid", out var keyIdObj))
+            var tokenHandler = new JwtSecurityTokenHandler()
             {
-                return new TokenValidationResult()
-                {
-                    IsValid = false,
-                    Exception = new Exception($"decoded token doesn't contain 'kid' header.")
-                };
-            }
-
-            var keyId = keyIdObj.ToString();
-
-            if (string.IsNullOrWhiteSpace(keyId))
-            {
-                return new TokenValidationResult()
-                {
-                    IsValid = false,
-                    Exception = new Exception($"decoded token contains a null or empty key ID.")
-                };
-            }
-
-            var cloudflareJwtSigningKey = cloudflareJwtSigningKeys
-                .FirstOrDefault(x => x.KeyId == keyId);
-
-            if (cloudflareJwtSigningKey is null)
-            {
-                return new TokenValidationResult()
-                {
-                    IsValid = false,
-                    Exception = new Exception($"can't find matching signing key with ID {keyId}")
-                };
-            }
-
-            if (Config.ValidateAuthenticatedEmail
-                && (!token.Payload.TryGetValue("email", out var tokenUserEmail) 
-                    || !authenticatedUserEmail.Equals(tokenUserEmail.ToString(), StringComparison.OrdinalIgnoreCase)))
-            {
-                return new TokenValidationResult()
-                {
-                    IsValid = false,
-                    Exception = new Exception($"email address missmatch. Token's user email: {tokenUserEmail} / CF header's user email: {authenticatedUserEmail}")
-                };
-            }
+                // Keep the original JWT claim names (e.g. 'email') instead of mapping them to WS-* URIs.
+                MapInboundClaims = false
+            };
 
             var validationParameters = new TokenValidationParameters()
             {
                 ValidIssuer = Config.JwtIssuer,
                 ValidAudience = Config.AppAud,
-                IssuerSigningKey = cloudflareJwtSigningKey.SigningKey,
+                IssuerSigningKeys = cloudflareJwtSigningKeys,
+                ValidAlgorithms = new[] { SecurityAlgorithms.RsaSha256 },
                 LogTokenId = false,
                 ValidateIssuerSigningKey = true
             };
 
-            return await tokenHandler.ValidateTokenAsync(cloudflareJwtValue, validationParameters);
+            // ValidateTokenAsync parses the token once, selects the signing key by its 'kid' header,
+            // and returns an invalid result (rather than throwing) for malformed or unverifiable tokens.
+            var tokenValidationResult = await tokenHandler.ValidateTokenAsync(cloudflareJwtValue, validationParameters);
+
+            if (tokenValidationResult.IsValid && Config.ValidateAuthenticatedEmail)
+            {
+                var tokenUserEmail = tokenValidationResult.ClaimsIdentity?.FindFirst("email")?.Value;
+
+                if (tokenUserEmail is null
+                    || !authenticatedUserEmail.Equals(tokenUserEmail, StringComparison.OrdinalIgnoreCase))
+                {
+                    return new TokenValidationResult()
+                    {
+                        IsValid = false,
+                        Exception = new Exception($"email address missmatch. Token's user email: {tokenUserEmail} / CF header's user email: {authenticatedUserEmail}")
+                    };
+                }
+            }
+
+            return tokenValidationResult;
         }
     }
 }

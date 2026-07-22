@@ -6,19 +6,19 @@ namespace CloudflareJwtValidator.Models
     internal class CloudflareJwtResponse
     {
         [JsonPropertyName("keys")]
-        public CloudflareJwtKey[] Keys { get; }
+        public CloudflareJwtKey[]? Keys { get; }
 
         [JsonPropertyName("public_cert")]
-        public CloudflareJwtCertificate PublicCertificate { get; }
+        public CloudflareJwtCertificate? PublicCertificate { get; }
 
         [JsonPropertyName("public_certs")]
         public CloudflareJwtCertificate[] PublicCertificates { get; }
 
         [JsonConstructor]
-        public CloudflareJwtResponse(CloudflareJwtKey[] keys, CloudflareJwtCertificate publicCertificate, CloudflareJwtCertificate[] publicCertificates)
+        public CloudflareJwtResponse(CloudflareJwtKey[]? keys, CloudflareJwtCertificate? publicCertificate, CloudflareJwtCertificate[] publicCertificates)
         {
-            Keys = keys ?? throw new ArgumentNullException(nameof(keys));
-            PublicCertificate = publicCertificate ?? throw new ArgumentNullException(nameof(publicCertificate));
+            Keys = keys;
+            PublicCertificate = publicCertificate;
             PublicCertificates = publicCertificates ?? throw new ArgumentNullException(nameof(publicCertificates));
         }
     }
