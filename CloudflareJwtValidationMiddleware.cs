@@ -159,7 +159,35 @@ namespace CloudflareJwtValidator
             }
 
             var tokenValidationResult = await ValidateJwtToken(cloudflareJwtValue.ToString(), cloudflareJwtSigningKeys, authenticatedUserEmail.ToString());
-            
+
+            // An unrecognised key ID usually means Cloudflare rotated its signing keys since our last
+            // fetch. Force a (rate-limited) key refresh and retry validation once before giving up.
+            if (!tokenValidationResult.IsValid
+                && tokenValidationResult.Exception is SecurityTokenSignatureKeyNotFoundException)
+            {
+                RsaSecurityKey[] refreshedSigningKeys;
+
+                try
+                {
+                    refreshedSigningKeys = await LockAndGetCloudflareJwtSigningKeys(forceRefresh: true);
+                }
+                catch (Exception ex)
+                {
+                    if (Config.LogFailedValidations)
+                    {
+                        Log($"Cloudflare JWT request failure: {(Config.UseDebugLogs ? ex.ToString() : ex.Message)}");
+                    }
+
+                    return false;
+                }
+
+                // Only retry if the refresh actually produced new keys (it may have been rate-limited).
+                if (!ReferenceEquals(refreshedSigningKeys, cloudflareJwtSigningKeys))
+                {
+                    tokenValidationResult = await ValidateJwtToken(cloudflareJwtValue.ToString(), refreshedSigningKeys, authenticatedUserEmail.ToString());
+                }
+            }
+
             if (!tokenValidationResult.IsValid && Config.LogFailedValidations)
             {
                 var errorLog = tokenValidationResult.Exception == null 
@@ -177,13 +205,13 @@ namespace CloudflareJwtValidator
         private static SemaphoreSlim CloudflareJwtKeysCacheSemaphore { get; } = new SemaphoreSlim(1, 1);
 
         // Ensure thread safety and a single instance of GetCloudflareJwtSigningKeys function execution
-        private async Task<RsaSecurityKey[]> LockAndGetCloudflareJwtSigningKeys()
+        private async Task<RsaSecurityKey[]> LockAndGetCloudflareJwtSigningKeys(bool forceRefresh = false)
         {
             await CloudflareJwtKeysCacheSemaphore.WaitAsync();
 
             try
             {
-                return await GetCloudflareJwtSigningKeys();
+                return await GetCloudflareJwtSigningKeys(forceRefresh);
             }
             finally
             {
@@ -193,26 +221,37 @@ namespace CloudflareJwtValidator
 
         private static (RsaSecurityKey[]?, DateTime) CloudflareJwtKeysCache { get; set; }
         
-        private async Task<RsaSecurityKey[]> GetCloudflareJwtSigningKeys()
+        private async Task<RsaSecurityKey[]> GetCloudflareJwtSigningKeys(bool forceRefresh = false)
         {
-            var cloudflareJwtSigningKeys = CloudflareJwtKeysCache.Item1;
-            var cloudflareJwtResponseCacheDate = CloudflareJwtKeysCache.Item2;
+            var (cachedSigningKeys, cacheDate) = CloudflareJwtKeysCache;
 
-            if (cloudflareJwtSigningKeys is null || cloudflareJwtResponseCacheDate + Config.KeyCacheTime < DateTime.UtcNow)
+            if (cachedSigningKeys != null)
             {
-                var url = $"{Config.JwtIssuer}/cdn-cgi/access/certs";
+                var isCacheExpired = cacheDate + Config.KeyCacheTime < DateTime.UtcNow;
 
-                var cloudflareJwtResponseJson = await HttpClient.GetStringAsync(url);
+                // A forced refresh (triggered by an unknown key ID) is rate-limited to avoid spamming
+                // Cloudflare when many tokens with unrecognised key IDs are received.
+                var isForcedRefreshAllowed = forceRefresh
+                    && cacheDate + Config.MinKeyRefreshInterval < DateTime.UtcNow;
 
-                var cloudflareJwtResponse = JsonSerializer.Deserialize<CloudflareJwtResponse>(cloudflareJwtResponseJson)
-                    ?? throw new NullReferenceException(nameof(CloudflareJwtResponse));
-
-                cloudflareJwtSigningKeys = cloudflareJwtResponse.PublicCertificates.ToSigningKeys();
-
-                CloudflareJwtKeysCache = (cloudflareJwtSigningKeys, DateTime.UtcNow);
+                if (!isCacheExpired && !isForcedRefreshAllowed)
+                {
+                    return cachedSigningKeys;
+                }
             }
 
-            return cloudflareJwtSigningKeys;
+            var url = $"{Config.JwtIssuer}/cdn-cgi/access/certs";
+
+            var cloudflareJwtResponseJson = await HttpClient.GetStringAsync(url);
+
+            var cloudflareJwtResponse = JsonSerializer.Deserialize<CloudflareJwtResponse>(cloudflareJwtResponseJson)
+                ?? throw new NullReferenceException(nameof(CloudflareJwtResponse));
+
+            var signingKeys = cloudflareJwtResponse.PublicCertificates.ToSigningKeys();
+
+            CloudflareJwtKeysCache = (signingKeys, DateTime.UtcNow);
+
+            return signingKeys;
         }
 
         private static async Task<TokenValidationResult> ValidateJwtToken(string cloudflareJwtValue, RsaSecurityKey[] cloudflareJwtSigningKeys, string authenticatedUserEmail)

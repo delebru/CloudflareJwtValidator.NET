@@ -93,6 +93,15 @@ namespace CloudflareJwtValidator.Models
         /// </summary>
         public TimeSpan KeyCacheTime { get; set; } = TimeSpan.FromHours(12);
 
+        /// <summary>
+        /// Minimum time between forced signing-key refreshes triggered by an unrecognised key ID (kid),
+        /// e.g. right after Cloudflare rotates its signing keys. When a token's kid is not found in the
+        /// cached keys, the keys are refreshed (bypassing <see cref="KeyCacheTime"/>) and validation is
+        /// retried once. This interval rate-limits those refreshes so a flood of tokens with unknown key
+        /// IDs cannot spam Cloudflare. Should be shorter than <see cref="KeyCacheTime"/> to be effective.
+        /// </summary>
+        public TimeSpan MinKeyRefreshInterval { get; set; } = TimeSpan.FromMinutes(5);
+
         private bool _logFailedValidations = true;
         /// <summary>
         /// Enables logging for failed JWT validations. Includes exception messages, if you need full strings set 
