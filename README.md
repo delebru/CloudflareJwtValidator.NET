@@ -110,5 +110,10 @@ The middleware logs through the standard `ILogger` pipeline (category `Cloudflar
 
 By default the authenticated user's email (PII) is redacted as `<redacted>` in log messages. Set `CanIncludePiiInLogs = true` to log the actual email address.
 
+## Limitations
+Only a single configuration is supported per application. The middleware stores its `CloudflareJwtValidatorConfig` (and the signing-key cache) statically, so calling `UseCloudflareJwtValidationMiddleware` more than once makes the last configuration win for all requests. Multiple issuers/audiences in the same app are not currently supported.
+
+The visitor IP included in logs is read from proxy headers (`Cf-Connecting-Ip`, `X-Forwarded-For`, `X-Real-IP`), falling back to the connection's remote IP. These headers can be spoofed by clients, so the logged IP is best-effort for diagnostics only and should not be treated as authoritative.
+
 ## Bug / improvements
 Please submit an issue for any bugs or improvements :) Pull requests also welcomed.
