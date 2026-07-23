@@ -88,7 +88,8 @@ namespace CloudflareJwtValidator
         }
 
         private static bool IsTokenValidationRequired(HostString hostname, PathString path)
-            => Config.HostnameMatchSettings.IsMatch(hostname.ToString()) 
+            // Match the host only, ignoring any port (HostString.ToString() would include ':port').
+            => Config.HostnameMatchSettings.IsMatch(hostname.Host) 
             && Config.PathMatchSettings.IsMatch(path.ToString());
 
         private async Task<bool> HasValidJwtToken(HttpContext httpContext)

@@ -95,6 +95,7 @@ app.Run();
   - `/admin/*` matches `/admin/` and anything below it (but not the bare `/admin`; use `/admin*` if you also want that).
   - `*.domain.com` matches any subdomain of `domain.com`.
 - Matching is case-insensitive.
+- Hostname patterns are matched against the host only — any port is ignored (e.g. `internal.domain.com` matches both `internal.domain.com` and `internal.domain.com:5000`). Path patterns are matched against the request path (without the query string).
 - `MatchingMode.Include` requires JWT validation only for values that match a pattern; `MatchingMode.Exclude` requires validation for everything **except** values that match. The `IncludeAll` / `ExcludeAll` / `IncludeAllExcept(...)` / `ExcludeAllExcept(...)` helpers cover the common cases. You can also pass raw `Regex` objects, which are used as-is (not anchored for you).
 
 > **Breaking change (v4):** patterns are now anchored at both ends. Previously they were prefix-only (start-anchored), so `/public` also matched `/publicadmin` — which could unintentionally exclude endpoints from validation. If you relied on prefix matching, append a `*` to your patterns (e.g. change `/admin` to `/admin/*` or `/admin*`).
