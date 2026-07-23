@@ -76,10 +76,10 @@ var pathMatchSettings = new StringMatchSettings(MatchingMode.Include, "/admin/*"
 
 var cloudflareJwtValidatorConfig = new CloudflareJwtValidatorConfig(cloudflareApplicationAudience, cloudflareTeamDomain, hostnameMatchSettings, pathMatchSettings)
 {
-    LogFailedValidations = true, // default: true; enables logging when a request's JWT validation fails
     FailedResponseBody = "custom error message/html", // default: string.Empty; response body when JWT validation fails
     FailedResponseStatusCode = 403, // default: 403; response status code when JWT validation fails
-    UseDebugLogs = false, // default: false; logs all requests and validation result
+    FailedValidationLogLevel = LogLevel.Information, // default: LogLevel.Warning; level used when a request's JWT validation fails
+    CanIncludePiiInLogs = false, // default: false; when false, the authenticated user's email is redacted in logs
 };
 
 (...) // other middlewares should go after JWT validation
@@ -98,6 +98,15 @@ app.Run();
 - `MatchingMode.Include` requires JWT validation only for values that match a pattern; `MatchingMode.Exclude` requires validation for everything **except** values that match. The `IncludeAll` / `ExcludeAll` / `IncludeAllExcept(...)` / `ExcludeAllExcept(...)` helpers cover the common cases. You can also pass raw `Regex` objects, which are used as-is (not anchored for you).
 
 > **Breaking change (v4):** patterns are now anchored at both ends. Previously they were prefix-only (start-anchored), so `/public` also matched `/publicadmin` — which could unintentionally exclude endpoints from validation. If you relied on prefix matching, append a `*` to your patterns (e.g. change `/admin` to `/admin/*` or `/admin*`).
+
+### Logging
+The middleware logs through the standard `ILogger` pipeline (category `CloudflareJwtValidator.CloudflareJwtValidationMiddleware`), so logs flow to whatever providers your app has configured and are filtered by your logging configuration's minimum level. What gets logged and at which level:
+
+- **Failed validations** (missing `Cf-Access-Jwt-Assertion`/`Cf-Access-Authenticated-User-Email` header, or an invalid token) are logged at `FailedValidationLogLevel` (default `LogLevel.Warning`, so they're visible under a typical `Information` minimum level). Lower it (e.g. `Debug`) to quiet them, or set `LogLevel.None` to silence them entirely.
+- **Signing-key fetch failures** (couldn't reach Cloudflare's `/cdn-cgi/access/certs`) are logged at `Error`.
+- **Per-request traces** ("ignoring"/"validated") are logged at `Debug`; enable `Debug` for this category to see them.
+
+By default the authenticated user's email (PII) is redacted as `<redacted>` in log messages. Set `CanIncludePiiInLogs = true` to log the actual email address.
 
 ## Bug / improvements
 Please submit an issue for any bugs or improvements :) Pull requests also welcomed.

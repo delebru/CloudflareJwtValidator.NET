@@ -9,6 +9,7 @@ using CloudflareJwtValidator.Extensions;
 using CloudflareJwtValidator.Models;
 
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Primitives;
 using Microsoft.IdentityModel.Tokens;
 
@@ -19,11 +20,10 @@ namespace CloudflareJwtValidator
         private const string kCloudflareJwtHeader = "Cf-Access-Jwt-Assertion";
         private const string kCloudflareEmailHeader = "Cf-Access-Authenticated-User-Email";
 
-        private const string kLogTag = "[CloudflareJwtValidator]";
-
         private readonly RequestDelegate _next;
+        private readonly ILogger<CloudflareJwtValidationMiddleware> _logger;
 
-        public CloudflareJwtValidationMiddleware(RequestDelegate next, HttpClient httpClient)
+        public CloudflareJwtValidationMiddleware(RequestDelegate next, HttpClient httpClient, ILogger<CloudflareJwtValidationMiddleware> logger)
         {
             if (Config is null)
             {
@@ -42,6 +42,7 @@ namespace CloudflareJwtValidator
             }
 
             _next = next;
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
             HttpClient = httpClient;
         }
 
@@ -49,35 +50,26 @@ namespace CloudflareJwtValidator
 
         internal static CloudflareJwtValidatorConfig Config { get; set; } = default!;
 
-        private static void Log(string v) 
-            => Console.WriteLine($"{kLogTag} {v}");
-
         public async Task Invoke(HttpContext httpContext)
         {
             if (!IsTokenValidationRequired(httpContext.Request.Host, httpContext.Request.Path))
             {
-                if (Config.UseDebugLogs)
-                {
-                    Log(
-                        $"[Ignoring JWT]" +
-                        $" IP: {httpContext.GetProxiedVisitorIp()}" +
-                        $" | Path: '{httpContext.GetRequestPath()}'"
-                    );
-                }
+                _logger.LogDebug(
+                    "Ignoring JWT. IP: {VisitorIp} | Path: '{RequestPath}'",
+                    httpContext.GetProxiedVisitorIp(),
+                    httpContext.GetRequestPath()
+                );
 
                 await _next(httpContext);
             }
-            else if (await HasValidJwtToken(httpContext.Request.Headers))
+            else if (await HasValidJwtToken(httpContext))
             {
-                if (Config.UseDebugLogs)
-                {
-                    Log(
-                        $"[JWT Validated]" +
-                        $" IP: {httpContext.GetProxiedVisitorIp()}" +
-                        $" | User: {httpContext.Request.Headers[kCloudflareEmailHeader]}" +
-                        $" | Path: '{httpContext.GetRequestPath()}'"
-                    );
-                }
+                _logger.LogDebug(
+                    "JWT validated. IP: {VisitorIp} | User: {User} | Path: '{RequestPath}'",
+                    httpContext.GetProxiedVisitorIp(),
+                    Config.CanIncludePiiInLogs ? httpContext.Request.Headers[kCloudflareEmailHeader].ToString() : "<redacted>",
+                    httpContext.GetRequestPath()
+                );
 
                 await _next(httpContext);
             }
@@ -86,16 +78,6 @@ namespace CloudflareJwtValidator
                 var response = httpContext.Response;
 
                 response.StatusCode = Config.FailedResponseStatusCode;
-
-                if (Config.LogFailedValidations)
-                {
-                    Log(
-                        $"[JWT Failed Validation]" +
-                        $" IP: {httpContext.GetProxiedVisitorIp()}" +
-                        $" | User: {httpContext.Request.Headers[kCloudflareEmailHeader]}" +
-                        $" | Path: '{httpContext.GetRequestPath()}'"
-                    );
-                }
 
                 if (response.Body.CanWrite)
                 {
@@ -109,16 +91,23 @@ namespace CloudflareJwtValidator
             => Config.HostnameMatchSettings.IsMatch(hostname.ToString()) 
             && Config.PathMatchSettings.IsMatch(path.ToString());
 
-        private async Task<bool> HasValidJwtToken(IHeaderDictionary requestHeaders)
+        private async Task<bool> HasValidJwtToken(HttpContext httpContext)
         {
             const string validationErrorMessage = "JWT validation failure:";
 
+            var requestHeaders = httpContext.Request.Headers;
+
             if (!requestHeaders.TryGetValue(kCloudflareJwtHeader, out var cloudflareJwtValue) || string.IsNullOrWhiteSpace(cloudflareJwtValue))
             {
-                if (Config.LogFailedValidations)
-                {
-                    Log($"{validationErrorMessage} missing header value '{kCloudflareJwtHeader}'");
-                }
+                _logger.Log(
+                    Config.FailedValidationLogLevel,
+                    "{Message} missing header value '{Header}'. IP: {VisitorIp} | User: {User} | Path: '{RequestPath}'",
+                    validationErrorMessage,
+                    kCloudflareJwtHeader,
+                    httpContext.GetProxiedVisitorIp(),
+                    Config.CanIncludePiiInLogs ? requestHeaders[kCloudflareEmailHeader].ToString() : "<redacted>",
+                    httpContext.GetRequestPath()
+                );
 
                 return false;
             }
@@ -129,10 +118,14 @@ namespace CloudflareJwtValidator
             {
                 if (!requestHeaders.TryGetValue(kCloudflareEmailHeader, out authenticatedUserEmail) || string.IsNullOrWhiteSpace(authenticatedUserEmail))
                 {
-                    if (Config.LogFailedValidations)
-                    {
-                        Log($"{validationErrorMessage} missing header value '{kCloudflareEmailHeader}'");
-                    }
+                    _logger.Log(
+                        Config.FailedValidationLogLevel,
+                        "{Message} missing header value '{Header}'. IP: {VisitorIp} | Path: '{RequestPath}'",
+                        validationErrorMessage,
+                        kCloudflareEmailHeader,
+                        httpContext.GetProxiedVisitorIp(),
+                        httpContext.GetRequestPath()
+                    );
 
                     return false;
                 }
@@ -150,10 +143,12 @@ namespace CloudflareJwtValidator
             }
             catch (Exception ex)
             {
-                if (Config.LogFailedValidations)
-                {
-                    Log($"Cloudflare JWT request failure: {(Config.UseDebugLogs ? ex.ToString() : ex.Message)}");
-                }
+                _logger.LogError(
+                    ex,
+                    "Cloudflare JWT signing key request failed. IP: {VisitorIp} | Path: '{RequestPath}'",
+                    httpContext.GetProxiedVisitorIp(),
+                    httpContext.GetRequestPath()
+                );
 
                 return false;
             }
@@ -173,10 +168,12 @@ namespace CloudflareJwtValidator
                 }
                 catch (Exception ex)
                 {
-                    if (Config.LogFailedValidations)
-                    {
-                        Log($"Cloudflare JWT request failure: {(Config.UseDebugLogs ? ex.ToString() : ex.Message)}");
-                    }
+                    _logger.LogError(
+                        ex,
+                        "Cloudflare JWT signing key request failed. IP: {VisitorIp} | Path: '{RequestPath}'",
+                        httpContext.GetProxiedVisitorIp(),
+                        httpContext.GetRequestPath()
+                    );
 
                     return false;
                 }
@@ -188,15 +185,17 @@ namespace CloudflareJwtValidator
                 }
             }
 
-            if (!tokenValidationResult.IsValid && Config.LogFailedValidations)
+            if (!tokenValidationResult.IsValid)
             {
-                var errorLog = tokenValidationResult.Exception == null 
-                    ? "unknown error"
-                    : Config.UseDebugLogs
-                        ? tokenValidationResult.Exception.ToString()
-                        : tokenValidationResult.Exception.Message;
-                
-                Log($"{validationErrorMessage} invalid token: {errorLog}");
+                _logger.Log(
+                    Config.FailedValidationLogLevel,
+                    tokenValidationResult.Exception,
+                    "{Message} invalid token. IP: {VisitorIp} | User: {User} | Path: '{RequestPath}'",
+                    validationErrorMessage,
+                    httpContext.GetProxiedVisitorIp(),
+                    Config.CanIncludePiiInLogs ? requestHeaders[kCloudflareEmailHeader].ToString() : "<redacted>",
+                    httpContext.GetRequestPath()
+                );
             }
 
             return tokenValidationResult.IsValid;
@@ -283,10 +282,13 @@ namespace CloudflareJwtValidator
                 if (tokenUserEmail is null
                     || !authenticatedUserEmail.Equals(tokenUserEmail, StringComparison.OrdinalIgnoreCase))
                 {
+                    var loggedTokenEmail = Config.CanIncludePiiInLogs ? tokenUserEmail : "<redacted>";
+                    var loggedHeaderEmail = Config.CanIncludePiiInLogs ? authenticatedUserEmail : "<redacted>";
+
                     return new TokenValidationResult()
                     {
                         IsValid = false,
-                        Exception = new Exception($"email address missmatch. Token's user email: {tokenUserEmail} / CF header's user email: {authenticatedUserEmail}")
+                        Exception = new Exception($"email address missmatch. Token's user email: {loggedTokenEmail} / CF header's user email: {loggedHeaderEmail}")
                     };
                 }
             }

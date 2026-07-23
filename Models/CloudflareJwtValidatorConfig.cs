@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Text;
 
+using Microsoft.Extensions.Logging;
+
 namespace CloudflareJwtValidator.Models
 {
     public class CloudflareJwtValidatorConfig
@@ -79,10 +81,14 @@ namespace CloudflareJwtValidator.Models
         public int FailedResponseStatusCode { get; set; } = 403;
 
         /// <summary>
-        /// Enables debug logs which will log all requests and full exceptions on failed JWT validations. 
-        /// Forces LogFailedValidations to return true.
+        /// Defines the log level for when JWT validation fails.
         /// </summary>
-        public bool UseDebugLogs { get; set; }
+        public LogLevel FailedValidationLogLevel { get; set; } = LogLevel.Warning;
+
+        /// <summary>
+        /// Defines if the app can include PII (Personally Identifiable Information) in logs, such as the JWT's payload email address.
+        /// </summary>
+        public bool CanIncludePiiInLogs { get; set; }
 
         /// <summary>
         /// How long to cache keys from Cloudflare and avoid spammy web requests. 
@@ -102,19 +108,15 @@ namespace CloudflareJwtValidator.Models
         /// </summary>
         public TimeSpan MinKeyRefreshInterval { get; set; } = TimeSpan.FromMinutes(5);
 
-        private bool _logFailedValidations = true;
-        /// <summary>
-        /// Enables logging for failed JWT validations. Includes exception messages, if you need full strings set 
-        /// UseDebugLogs to true.
-        /// </summary>
-        public bool LogFailedValidations {
-            get => _logFailedValidations || UseDebugLogs;
-            set => _logFailedValidations = value;
-        }
-
         /// <summary>
         /// Ensures the email address in the Cf-Access-Authenticated-User-Email header matches the JWT's payload email address.
         /// </summary>
         public bool ValidateAuthenticatedEmail { get; set; } = true;
+
+        [Obsolete("Deprecated since 4.0.0, please use FailedValidationLogLevel instead")]
+        public bool UseDebugLogs { get; set; }
+
+        [Obsolete("Deprecated since 4.0.0, please use FailedValidationLogLevel instead")]
+        public bool LogFailedValidations { get; set; }
     }
 }
