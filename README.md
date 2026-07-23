@@ -52,7 +52,7 @@ app.Run();
 A combination of string matching patterns for hostnames and/or paths can be passed to the `CloudflareJwtValidatorConfig` object. For example, if your app is behind a proxy receiving request from multiple hostnames, you may want to validate the tokens only from certain hostnames.
 
 
-In the example below, the middleware will ignore JWT headers on all requests when the request hostname is `internal.domain.com`, and will also only check for valid JWT headers if the path is `/admin/*` (`*` being a wildcard).
+In the example below, the middleware will ignore JWT headers on all requests when the request hostname is `internal.domain.com`, and will also only check for valid JWT headers if the path starts with `/admin/` (see [Pattern matching](#pattern-matching) below for the `*` wildcard semantics).
 
 @ Program.cs:
 ```
@@ -86,6 +86,18 @@ var cloudflareJwtValidatorConfig = new CloudflareJwtValidatorConfig(cloudflareAp
 
 app.Run();
 ```
+
+### Pattern matching
+`StringMatchSettings` patterns (for hostnames and paths) are matched against the **whole** value:
+
+- A pattern **without** `*` is an exact, whole-value match. `internal.domain.com` matches only that host, not `internal.domain.com.evil.com`; `/admin` matches only `/admin`, not `/administrator`.
+- `*` is a wildcard matching any sequence of characters (including an empty one). Use it for prefix/suffix/segment matching:
+  - `/admin/*` matches `/admin/` and anything below it (but not the bare `/admin`; use `/admin*` if you also want that).
+  - `*.domain.com` matches any subdomain of `domain.com`.
+- Matching is case-insensitive.
+- `MatchingMode.Include` requires JWT validation only for values that match a pattern; `MatchingMode.Exclude` requires validation for everything **except** values that match. The `IncludeAll` / `ExcludeAll` / `IncludeAllExcept(...)` / `ExcludeAllExcept(...)` helpers cover the common cases. You can also pass raw `Regex` objects, which are used as-is (not anchored for you).
+
+> **Breaking change (v4):** patterns are now anchored at both ends. Previously they were prefix-only (start-anchored), so `/public` also matched `/publicadmin` — which could unintentionally exclude endpoints from validation. If you relied on prefix matching, append a `*` to your patterns (e.g. change `/admin` to `/admin/*` or `/admin*`).
 
 ## Bug / improvements
 Please submit an issue for any bugs or improvements :) Pull requests also welcomed.

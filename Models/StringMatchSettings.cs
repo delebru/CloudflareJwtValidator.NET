@@ -46,7 +46,7 @@ namespace CloudflareJwtValidator.Models
                 matchingMode,
                 matchingPatterns?.Select(
                     matchingPattern => new Regex(
-                        "^" + Regex.Escape(matchingPattern).Replace($"\\{kPatternWildcard}", ".*?"),
+                        "^" + Regex.Escape(matchingPattern).Replace($"\\{kPatternWildcard}", ".*?") + "$",
                         RegexOptions.IgnoreCase
                     )
                 )
