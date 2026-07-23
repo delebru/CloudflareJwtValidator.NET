@@ -242,10 +242,16 @@ namespace CloudflareJwtValidator
 
             var url = $"{Config.JwtIssuer}/cdn-cgi/access/certs";
 
-            var cloudflareJwtResponseJson = await HttpClient.GetStringAsync(url);
+            using var cts = new CancellationTokenSource(Config.KeyRequestTimeout);
+
+            using var httpResponse = await HttpClient.GetAsync(url, cts.Token);
+
+            httpResponse.EnsureSuccessStatusCode();
+
+            var cloudflareJwtResponseJson = await httpResponse.Content.ReadAsStringAsync();
 
             var cloudflareJwtResponse = JsonSerializer.Deserialize<CloudflareJwtResponse>(cloudflareJwtResponseJson)
-                ?? throw new NullReferenceException(nameof(CloudflareJwtResponse));
+                ?? throw new InvalidOperationException($"Cloudflare signing key response from '{url}' deserialized to null.");
 
             var signingKeys = cloudflareJwtResponse.PublicCertificates.ToSigningKeys();
 

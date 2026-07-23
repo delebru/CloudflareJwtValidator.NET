@@ -80,6 +80,7 @@ var cloudflareJwtValidatorConfig = new CloudflareJwtValidatorConfig(cloudflareAp
     FailedResponseStatusCode = 403, // default: 403; response status code when JWT validation fails
     FailedValidationLogLevel = LogLevel.Information, // default: LogLevel.Warning; level used when a request's JWT validation fails
     CanIncludePiiInLogs = false, // default: false; when false, the authenticated user's email is redacted in logs
+    KeyRequestTimeout = TimeSpan.FromSeconds(10), // default: 10s; per-request timeout for downloading Cloudflare's signing keys
 };
 
 (...) // other middlewares should go after JWT validation

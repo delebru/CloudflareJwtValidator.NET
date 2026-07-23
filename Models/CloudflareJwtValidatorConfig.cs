@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Text;
+using System.Threading;
 
 using Microsoft.Extensions.Logging;
 
@@ -98,6 +99,28 @@ namespace CloudflareJwtValidator.Models
         /// time for you to make the update.'
         /// </summary>
         public TimeSpan KeyCacheTime { get; set; } = TimeSpan.FromHours(12);
+
+        /// <summary>
+        /// Maximum time to wait for the request that downloads Cloudflare's signing keys from
+        /// {JwtIssuer}/cdn-cgi/access/certs. This is applied per request (via a CancellationToken), so it
+        /// does not affect the shared HttpClient's global timeout. Because the key request runs under a
+        /// lock, keeping this reasonably short prevents a slow response from stalling other requests.
+        /// Must be a finite, positive duration.
+        /// </summary>
+        public TimeSpan KeyRequestTimeout
+        {
+            get => _keyRequestTimeout;
+            set
+            {
+                if (value <= TimeSpan.Zero || value == Timeout.InfiniteTimeSpan)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(KeyRequestTimeout), value, $"'{nameof(KeyRequestTimeout)}' must be a finite, positive duration.");
+                }
+
+                _keyRequestTimeout = value;
+            }
+        }
+        private TimeSpan _keyRequestTimeout = TimeSpan.FromSeconds(10);
 
         /// <summary>
         /// Minimum time between forced signing-key refreshes triggered by an unrecognised key ID (kid),
