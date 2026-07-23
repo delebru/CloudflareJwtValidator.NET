@@ -1,5 +1,8 @@
 ﻿using System;
 using System.Text;
+using System.Threading;
+
+using Microsoft.Extensions.Logging;
 
 namespace CloudflareJwtValidator.Models
 {
@@ -79,10 +82,14 @@ namespace CloudflareJwtValidator.Models
         public int FailedResponseStatusCode { get; set; } = 403;
 
         /// <summary>
-        /// Enables debug logs which will log all requests and full exceptions on failed JWT validations. 
-        /// Forces LogFailedValidations to return true.
+        /// Defines the log level for when JWT validation fails.
         /// </summary>
-        public bool UseDebugLogs { get; set; }
+        public LogLevel FailedValidationLogLevel { get; set; } = LogLevel.Warning;
+
+        /// <summary>
+        /// Defines if the app can include PII (Personally Identifiable Information) in logs, such as the JWT's payload email address.
+        /// </summary>
+        public bool CanIncludePiiInLogs { get; set; }
 
         /// <summary>
         /// How long to cache keys from Cloudflare and avoid spammy web requests. 
@@ -93,19 +100,46 @@ namespace CloudflareJwtValidator.Models
         /// </summary>
         public TimeSpan KeyCacheTime { get; set; } = TimeSpan.FromHours(12);
 
-        private bool _logFailedValidations = true;
         /// <summary>
-        /// Enables logging for failed JWT validations. Includes exception messages, if you need full strings set 
-        /// UseDebugLogs to true.
+        /// Maximum time to wait for the request that downloads Cloudflare's signing keys from
+        /// {JwtIssuer}/cdn-cgi/access/certs. This is applied per request (via a CancellationToken), so it
+        /// does not affect the shared HttpClient's global timeout. Because the key request runs under a
+        /// lock, keeping this reasonably short prevents a slow response from stalling other requests.
+        /// Must be a finite, positive duration.
         /// </summary>
-        public bool LogFailedValidations {
-            get => _logFailedValidations || UseDebugLogs;
-            set => _logFailedValidations = value;
+        public TimeSpan KeyRequestTimeout
+        {
+            get => _keyRequestTimeout;
+            set
+            {
+                if (value <= TimeSpan.Zero || value == Timeout.InfiniteTimeSpan)
+                {
+                    throw new ArgumentOutOfRangeException(nameof(KeyRequestTimeout), value, $"'{nameof(KeyRequestTimeout)}' must be a finite, positive duration.");
+                }
+
+                _keyRequestTimeout = value;
+            }
         }
+        private TimeSpan _keyRequestTimeout = TimeSpan.FromSeconds(10);
+
+        /// <summary>
+        /// Minimum time between forced signing-key refreshes triggered by an unrecognised key ID (kid),
+        /// e.g. right after Cloudflare rotates its signing keys. When a token's kid is not found in the
+        /// cached keys, the keys are refreshed (bypassing <see cref="KeyCacheTime"/>) and validation is
+        /// retried once. This interval rate-limits those refreshes so a flood of tokens with unknown key
+        /// IDs cannot spam Cloudflare. Should be shorter than <see cref="KeyCacheTime"/> to be effective.
+        /// </summary>
+        public TimeSpan MinKeyRefreshInterval { get; set; } = TimeSpan.FromMinutes(5);
 
         /// <summary>
         /// Ensures the email address in the Cf-Access-Authenticated-User-Email header matches the JWT's payload email address.
         /// </summary>
         public bool ValidateAuthenticatedEmail { get; set; } = true;
+
+        [Obsolete("Deprecated since 4.0.0, please use FailedValidationLogLevel instead")]
+        public bool UseDebugLogs { get; set; }
+
+        [Obsolete("Deprecated since 4.0.0, please use FailedValidationLogLevel instead")]
+        public bool LogFailedValidations { get; set; }
     }
 }
