@@ -81,6 +81,7 @@ var cloudflareJwtValidatorConfig = new CloudflareJwtValidatorConfig(cloudflareAp
     FailedValidationLogLevel = LogLevel.Information, // default: LogLevel.Warning; level used when a request's JWT validation fails
     CanIncludePiiInLogs = false, // default: false; when false, the authenticated user's email is redacted in logs
     KeyRequestTimeout = TimeSpan.FromSeconds(10), // default: 10s; per-request timeout for downloading Cloudflare's signing keys
+    AllowedServiceTokenClientIds = new[] { "<service-token-client-id>.access" }, // default: empty; see Service tokens below
 };
 
 (...) // other middlewares should go after JWT validation
@@ -100,6 +101,14 @@ app.Run();
 - `MatchingMode.Include` requires JWT validation only for values that match a pattern; `MatchingMode.Exclude` requires validation for everything **except** values that match. The `IncludeAll` / `ExcludeAll` / `IncludeAllExcept(...)` / `ExcludeAllExcept(...)` helpers cover the common cases. You can also pass raw `Regex` objects, which are used as-is (not anchored for you).
 
 > **Breaking change (v4):** patterns are now anchored at both ends. Previously they were prefix-only (start-anchored), so `/public` also matched `/publicadmin` — which could unintentionally exclude endpoints from validation. If you relied on prefix matching, append a `*` to your patterns (e.g. change `/admin` to `/admin/*` or `/admin*`).
+
+### Service tokens
+A request authenticated with a [Cloudflare Access service token](https://developers.cloudflare.com/cloudflare-one/access-controls/service-credentials/service-tokens/) has no user, so it arrives without the `Cf-Access-Authenticated-User-Email` header and its JWT has no `email` claim. With `ValidateAuthenticatedEmail` on (the default), such requests are rejected unless the token's Client ID is listed in `AllowedServiceTokenClientIds`.
+
+- List the full Client ID, the same value sent as `CF-Access-Client-Id`, including its `.access` suffix. Cloudflare puts it in the JWT's `common_name` claim. The Client ID is not a secret; the Client Secret is never needed here.
+- The token's signature, issuer and audience are validated exactly as for a user's token. Only the email match is skipped, and only for a token that has no `email` claim.
+- An allowed service token is accepted on every hostname and path the middleware validates.
+- With `ValidateAuthenticatedEmail` off, the list is not used: any token Cloudflare issued for the application is accepted.
 
 ### Logging
 The middleware logs through the standard `ILogger` pipeline (category `CloudflareJwtValidator.CloudflareJwtValidationMiddleware`), so logs flow to whatever providers your app has configured and are filtered by your logging configuration's minimum level. What gets logged and at which level:

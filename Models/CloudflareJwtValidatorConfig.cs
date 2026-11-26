@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Text;
 using System.Threading;
 
@@ -135,6 +136,15 @@ namespace CloudflareJwtValidator.Models
         /// Ensures the email address in the Cf-Access-Authenticated-User-Email header matches the JWT's payload email address.
         /// </summary>
         public bool ValidateAuthenticatedEmail { get; set; } = true;
+
+        /// <summary>
+        /// Client IDs (the CF-Access-Client-Id value, including its '.access' suffix) of the Cloudflare Access
+        /// service tokens allowed through while <see cref="ValidateAuthenticatedEmail"/> is on.
+        /// A service token has no user, so its JWT has no email to validate: it carries the Client ID in
+        /// the 'common_name' claim instead. Empty by default, which rejects every service token.
+        /// See: https://developers.cloudflare.com/cloudflare-one/access-controls/applications/http-apps/authorization-cookie/application-token/
+        /// </summary>
+        public IReadOnlyCollection<string> AllowedServiceTokenClientIds { get; set; } = Array.Empty<string>();
 
         [Obsolete("Deprecated since 4.0.0, please use FailedValidationLogLevel instead")]
         public bool UseDebugLogs { get; set; }
