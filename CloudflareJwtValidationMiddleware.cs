@@ -1,5 +1,6 @@
 using System;
 using System.IdentityModel.Tokens.Jwt;
+using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
 using System.Threading;
@@ -117,7 +118,11 @@ namespace CloudflareJwtValidator
 
             if (Config.ValidateAuthenticatedEmail)
             {
-                if (!requestHeaders.TryGetValue(kCloudflareEmailHeader, out authenticatedUserEmail) || string.IsNullOrWhiteSpace(authenticatedUserEmail))
+                var hasAuthenticatedUserEmail = requestHeaders.TryGetValue(kCloudflareEmailHeader, out authenticatedUserEmail)
+                    && !string.IsNullOrWhiteSpace(authenticatedUserEmail);
+
+                // A service token request has no email header, so it can only be told apart once its token is read.
+                if (!hasAuthenticatedUserEmail && Config.AllowedServiceTokenClientIds.Count == 0)
                 {
                     _logger.Log(
                         Config.FailedValidationLogLevel,
@@ -285,6 +290,17 @@ namespace CloudflareJwtValidator
             if (tokenValidationResult.IsValid && Config.ValidateAuthenticatedEmail)
             {
                 var tokenUserEmail = tokenValidationResult.ClaimsIdentity?.FindFirst("email")?.Value;
+
+                if (tokenUserEmail is null)
+                {
+                    var serviceTokenClientId = tokenValidationResult.ClaimsIdentity?.FindFirst("common_name")?.Value;
+
+                    if (!string.IsNullOrEmpty(serviceTokenClientId)
+                        && Config.AllowedServiceTokenClientIds.Contains(serviceTokenClientId, StringComparer.OrdinalIgnoreCase))
+                    {
+                        return tokenValidationResult;
+                    }
+                }
 
                 if (tokenUserEmail is null
                     || !authenticatedUserEmail.Equals(tokenUserEmail, StringComparison.OrdinalIgnoreCase))
